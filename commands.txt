@@ -1,0 +1,105 @@
+-- Create RDS database
+-- Create EC2 instance
+
+# In Ubuntu Commandline AWS:
+
+sudo apt update
+sudo apt install python3-pip
+sudo apt install python3-venv
+python3 -m venv airflow_venv
+source airflow_venv/bin/activate
+pip install pandas 
+pip install s3fs
+pip install fsspec
+pip install apache-airflow
+pip install apache-airflow-providers-postgres
+pip install awscli
+
+-- Postgre SQL Client Install:
+# Import the repository signing key:
+
+sudo apt install curl ca-certificates
+sudo install -d /usr/share/postgresql-common/pgdg
+sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+
+# Create the repository configuration file:
+
+sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+# Install the latest version of PostgreSQL:
+
+sudo apt -y install postgresql
+
+-- Create Keypair for accessing AWS S3
+
+aws configure
+
+-- Add inbound rule for postgres port 5432 in EC2 and RDS
+
+# Configure PostreSQL from RDS in EC2 (-W means to prompt everytime for password when we need to get into Postgres)
+
+psql -h <endpoint in RDS Database> -p 5432 -U postgres -W
+
+--After Entering the master passsword:
+
+## Link to install aws extension
+--https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PostgreSQL.S3Import.InstallExtension.html
+
+-- Or Install Directly With Command below:
+
+## Installing the aws_s3 extension
+
+CREATE EXTENSION aws_s3 CASCADE;
+
+# Verify that the extension is installed
+
+\dx
+
+# List all databases
+
+\list
+
+# To quit PostgreSQL
+
+\q
+
+-- Create S3 Bucket
+
+=====================================================
+## Create Policy
+aws iam create-policy \
+    --policy-name postgresql-S3-Policy-parallel-1 \
+    --policy-document '{"Version": "2012-10-17", "Statement": [{"Sid": "s3import", "Action": ["s3:GetObject", "s3:ListBucket"], "Effect": "Allow", "Resource": ["arn:aws:s3:::s3-parallel-qi", "arn:aws:s3:::s3-parallel-qi/*"]}]}'
+
+=====================================================
+## Create Role
+aws iam create-role \
+    --role-name postgresql-S3-Role-parallel-1 \
+    --assume-role-policy-document '{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Service": "rds.amazonaws.com"}, "Action": "sts:AssumeRole"}]}'
+
+=====================================================
+## Attach Policy to Role
+aws iam attach-role-policy \
+    --policy-arn [policy-arn] \
+    --role-name [role-name]
+
+=====================================================
+## Attach Role to Database
+aws rds add-role-to-db-instance \
+   --db-instance-identifier [rds-instance-name] \
+   --feature-name s3Import \
+   --role-arn [role-arn] \
+   --region [region]
+
+=====================================================
+
+
+-- To Run Airflow
+
+pip uninstall wtforms
+
+pip install wtforms==2.3.3
+
+airflow standalone
+
+-- Create Connections in Airflow
